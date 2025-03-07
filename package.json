@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "devDependencies": {},
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon src/index.js"
   },
   "repository": {
     "type": "git",
@@ -18,5 +18,14 @@
   "bugs": {
     "url": "https://github.com/Pepe10k/nodejs-hw-mongodb/issues"
   },
-  "homepage": "https://github.com/Pepe10k/nodejs-hw-mongodb#readme"
+  "homepage": "https://github.com/Pepe10k/nodejs-hw-mongodb#readme",
+  "dependencies": {
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.21.0",
+    "eslint": "^9.21.0",
+    "globals": "^16.0.0",
+    "nodemon": "^3.1.9"
+  }
 }
