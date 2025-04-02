@@ -1,75 +1,83 @@
+import { randomBytes } from 'crypto';
+import bcrypt from 'bcrypt';
 import createHttpError from 'http-errors';
+import User from '../models/user.js';
+import Session from '../models/session.js';
 
-import { SORT_ORDER } from '../constants/index.js';
-import { ContactsCollection } from '../models/contact.js';
-import { calculatePaginationData } from '../utils/calculatePaginationData.js';
+const FIFTEEN_MINUTES = 15 * 60 * 1000;
+const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 
-export const getContacts = async ({
-  page = 1,
-  perPage = 10,
-  sortOrder = SORT_ORDER.ASC,
-  sortBy = '_id',
-  filter = {},
-  userId,
-}) => {
-  const limit = perPage;
-  const skip = (page - 1) * perPage;
+const findUserByEmail = async (email) => {
+  return User.findOne({ email });
+};
 
-  const contactQuery = ContactsCollection.find({ userId });
+const createUser = async ({ name, email, password }) => {
+  const hashedPassword = await bcrypt.hash(password, 10);
+  return User.create({ name, email, password: hashedPassword });
+};
 
-  if (filter.isFavourite) {
-    contactQuery.where('isFavourite').equals(filter.isFavourite);
+const loginUser = async ({ email, password }) => {
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw createHttpError(401, 'Invalid email or password');
   }
 
-  if (filter.contactType) {
-    contactQuery.where('contactType').equals(filter.contactType);
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    throw createHttpError(401, 'Invalid email or password');
   }
 
-  const contactCount = await ContactsCollection.find({ userId })
-    .merge(contactQuery)
-    .countDocuments();
+  await Session.deleteOne({ userId: user._id });
 
-  const totalPages = Math.ceil(contactCount / perPage);
+  const accessToken = randomBytes(30).toString('base64');
+  const refreshToken = randomBytes(30).toString('base64');
 
-  if (page > totalPages && totalPages > 0) {
-    throw createHttpError(400, 'Invalid page number');
-  }
-
-  const contacts = await contactQuery
-    .skip(skip)
-    .limit(limit)
-    .sort({ [sortBy]: sortOrder })
-    .exec();
-
-  const paginationData = calculatePaginationData(contactCount, perPage, page);
-
-  return {
-    data: contacts,
-    ...paginationData,
-  };
-};
-
-export const getContactById = (contactId, userId) => {
-  return ContactsCollection.findOne({ _id: contactId, userId });
-};
-
-export const createContact = (payload) => {
-  return ContactsCollection.create(payload);
-};
-
-export const updateContact = async (contactId, payload, userId) => {
-  const updatedContact = await ContactsCollection.findOneAndUpdate(
-    { _id: contactId, userId },
-    payload,
-    { new: true, includeResultMetadata: true },
-  );
-
-  return updatedContact;
-};
-
-export const deleteContact = (contactId, userId) => {
-  return ContactsCollection.findOneAndDelete({
-    _id: contactId,
-    userId,
+  await Session.create({
+    userId: user._id,
+    accessToken,
+    refreshToken,
+    accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
+    refreshTokenValidUntil: new Date(Date.now() + THIRTY_DAYS),
   });
+
+  return { accessToken, refreshToken };
+};
+
+const refreshSession = async (oldRefreshToken) => {
+  const session = await Session.findOne({ refreshToken: oldRefreshToken });
+  if (!session || new Date() > session.refreshTokenValidUntil) {
+    throw createHttpError(403, 'Invalid or expired refresh token');
+  }
+
+  await Session.deleteOne({ _id: session._id });
+
+  const accessToken = randomBytes(30).toString('base64');
+  const refreshToken = randomBytes(30).toString('base64');
+
+  await Session.create({
+    userId: session.userId,
+    accessToken,
+    refreshToken,
+    accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
+    refreshTokenValidUntil: new Date(Date.now() + THIRTY_DAYS),
+  });
+
+  return { accessToken, refreshToken };
+};
+
+const logoutUser = async (refreshToken) => {
+  const session = await Session.findOne({ refreshToken });
+  if (!session) {
+    throw createHttpError(403, 'Invalid refresh token');
+  }
+
+  await Session.deleteOne({ _id: session._id });
+};
+
+export default {
+  findUserByEmail,
+  createUser,
+  loginUser,
+  refreshSession,
+  logoutUser,
 };

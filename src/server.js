@@ -1,32 +1,37 @@
 import express from 'express';
-import pino from 'pino-http';
 import cors from 'cors';
-import getEnvVar from './utils/getEnvVar.js';
+import pino from 'pino-http';
+import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
 import contactsRouter from './routers/contacts.js';
-import { notFoundHandler } from './middlewares/notFoundHandler.js';
-import { errorHandler } from './middlewares/errorHandler.js';
-const PORT = Number(getEnvVar('PORT', '8080'));
+import errorHandler from './middlewares/errorHandler.js';
+import notFoundHandler from './middlewares/notFoundHandler.js';
+import authRouter from './routers/auth.js';
 
-async function setupServer() {
+dotenv.config();
+
+const setupServer = () => {
   const app = express();
+  const PORT = process.env.PORT || 3000;
 
-  app.use(express.json());
   app.use(cors());
-  app.use(
-    pino({
-      transport: {
-        target: 'pino-pretty',
-      },
-    }),
-  );
+  app.use(pino());
+  app.use(express.json());
+  app.use(cookieParser());
 
-  app.use(contactsRouter);
+  app.use('/contacts', contactsRouter);
+  app.use('/auth', authRouter);
+
+  app.get('/', (req, res) => {
+    res.json({ message: 'Hello world!' });
+  });
+
   app.use('*', notFoundHandler);
   app.use(errorHandler);
 
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });
-}
+};
 
 export default setupServer;
