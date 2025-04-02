@@ -24,3 +24,5 @@ export const parseFilterParams = (query) => {
     contactType: parsedContactType,
   };
 };
+
+export default parseFilterParams;
