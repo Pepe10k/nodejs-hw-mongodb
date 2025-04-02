@@ -21,3 +21,5 @@ export const parsePaginationParams = (query) => {
     perPage: parsedPerPage,
   };
 };
+
+export default parsePaginationParams;

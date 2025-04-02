@@ -1,77 +1,86 @@
-import {
-  loginUser,
-  logoutUser,
-  refreshUsersSession,
-  registerUser,
-} from '../services/auth.js';
-import { ONE_DAY } from '../constants/index.js';
+import createHttpError from 'http-errors';
+import authService from '../services/auth.js';
 
-export const registerUserController = async (req, res) => {
-  const user = await registerUser(req.body);
+const COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
+
+const register = async (req, res) => {
+  const { name, email, password } = req.body;
+
+  const existingUser = await authService.findUserByEmail(email);
+  if (existingUser) {
+    throw createHttpError(409, 'Email in use');
+  }
+
+  const newUser = await authService.createUser({ name, email, password });
 
   res.status(201).json({
     status: 201,
     message: 'Successfully registered a user!',
-    data: user,
-  });
-};
-
-export const loginUserController = async (req, res) => {
-  const session = await loginUser(req.body);
-
-  res.cookie('refreshToken', session.refreshToken, {
-    httpOnly: true,
-    expires: new Date(Date.now() + ONE_DAY),
-  });
-
-  res.cookie('sessionId', session._id, {
-    httpOnly: true,
-    expires: new Date(Date.now() + ONE_DAY),
-  });
-
-  res.json({
-    status: 200,
-    message: 'Successfully logged in an user!',
     data: {
-      accessToken: session.accessToken,
+      id: newUser._id,
+      name: newUser.name,
+      email: newUser.email,
     },
   });
 };
 
-const setupSession = (res, session) => {
-  res.cookie('refreshToken', session.refreshToken, {
-    httpOnly: true,
-    expires: new Date(Date.now() + ONE_DAY),
+const login = async (req, res) => {
+  const { email, password } = req.body;
+  const { accessToken, refreshToken } = await authService.loginUser({
+    email,
+    password,
   });
 
-  res.cookie('sessionId', session._id, {
+  res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
-    expires: new Date(Date.now() + ONE_DAY),
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: COOKIE_MAX_AGE,
+  });
+
+  res.status(200).json({
+    status: 200,
+    message: 'Successfully logged in a user!',
+    data: { accessToken },
   });
 };
 
-export const refreshUserSessionController = async (req, res) => {
-  const session = await refreshUsersSession({
-    sessionId: req.cookies.sessionId,
-    refreshToken: req.cookies.refreshToken,
+const refresh = async (req, res) => {
+  const { refreshToken: oldRefreshToken } = req.cookies;
+  if (!oldRefreshToken) {
+    throw createHttpError(401, 'Refresh token missing');
+  }
+
+  const { accessToken, refreshToken } = await authService.refreshSession(
+    oldRefreshToken,
+  );
+
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: COOKIE_MAX_AGE,
   });
 
-  setupSession(res, session);
-
-  res.json({
+  res.status(200).json({
     status: 200,
     message: 'Successfully refreshed a session!',
-    data: {
-      accessToken: session.accessToken,
-    },
+    data: { accessToken },
   });
 };
 
-export const logoutUserController = async (req, res) => {
-  if (req.cookies.sessionId) await logoutUser(req.cookies.sessionId);
+const logout = async (req, res) => {
+  const { refreshToken } = req.cookies;
+  if (!refreshToken) {
+    throw createHttpError(401, 'Not authenticated');
+  }
 
-  res.clearCookie('sessionId');
-  res.clearCookie('refreshToken');
+  await authService.logoutUser(refreshToken);
+
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+  });
 
   res.status(204).send();
 };
+
+export default { register, login, refresh, logout };

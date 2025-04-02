@@ -36,3 +36,5 @@ export const parseSortParams = (query) => {
     sortBy: parsedSortBy,
   };
 };
+
+export default parseSortParams;
