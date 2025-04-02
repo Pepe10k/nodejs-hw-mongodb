@@ -3,7 +3,11 @@ import createHttpError from 'http-errors';
 import { UsersCollection } from '../models/user.js';
 import { SessionsCollection } from '../models/session.js';
 
+const openRoutes = ['/auth/register', '/auth/login'];
+
 export const authenticate = async (req, res, next) => {
+  if (openRoutes.includes(req.path)) return next();
+
   const authHeader = req.get('Authorization');
 
   if (!authHeader) {
