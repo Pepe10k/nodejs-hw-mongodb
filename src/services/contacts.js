@@ -1,83 +1,50 @@
-import { randomBytes } from 'crypto';
-import bcrypt from 'bcrypt';
-import createHttpError from 'http-errors';
-import User from '../models/user.js';
-import Session from '../models/session.js';
+import Contact from '../models/contact.js';
 
-const FIFTEEN_MINUTES = 15 * 60 * 1000;
-const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+const getAllContacts = async (
+  userId,
+  page,
+  perPage,
+  sortBy,
+  sortOrder,
+  filter,
+) => {
+  const { contactType, isFavourite } = filter;
 
-const findUserByEmail = async (email) => {
-  return User.findOne({ email });
+  const query = { userId };
+  if (contactType) query.contactType = contactType;
+  if (isFavourite !== null) query.isFavourite = isFavourite;
+
+  const totalItems = await Contact.countDocuments(query);
+  const contacts = await Contact.find(query)
+    .sort({ [sortBy]: sortOrder })
+    .skip((page - 1) * perPage)
+    .limit(perPage);
+
+  return { contacts, totalItems };
 };
 
-const createUser = async ({ name, email, password }) => {
-  const hashedPassword = await bcrypt.hash(password, 10);
-  return User.create({ name, email, password: hashedPassword });
+const getContactById = async (contactId, userId) => {
+  return Contact.findOne({ _id: contactId, userId });
 };
 
-const loginUser = async ({ email, password }) => {
-  const user = await User.findOne({ email });
-  if (!user) {
-    throw createHttpError(401, 'Invalid email or password');
-  }
+const createContact = async (contactData) => {
+  return Contact.create(contactData);
+};
 
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) {
-    throw createHttpError(401, 'Invalid email or password');
-  }
-
-  await Session.deleteOne({ userId: user._id });
-
-  const accessToken = randomBytes(30).toString('base64');
-  const refreshToken = randomBytes(30).toString('base64');
-
-  await Session.create({
-    userId: user._id,
-    accessToken,
-    refreshToken,
-    accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
-    refreshTokenValidUntil: new Date(Date.now() + THIRTY_DAYS),
+const updateContactById = async (contactId, userId, updateData) => {
+  return Contact.findOneAndUpdate({ _id: contactId, userId }, updateData, {
+    new: true,
   });
-
-  return { accessToken, refreshToken };
 };
 
-const refreshSession = async (oldRefreshToken) => {
-  const session = await Session.findOne({ refreshToken: oldRefreshToken });
-  if (!session || new Date() > session.refreshTokenValidUntil) {
-    throw createHttpError(403, 'Invalid or expired refresh token');
-  }
-
-  await Session.deleteOne({ _id: session._id });
-
-  const accessToken = randomBytes(30).toString('base64');
-  const refreshToken = randomBytes(30).toString('base64');
-
-  await Session.create({
-    userId: session.userId,
-    accessToken,
-    refreshToken,
-    accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
-    refreshTokenValidUntil: new Date(Date.now() + THIRTY_DAYS),
-  });
-
-  return { accessToken, refreshToken };
-};
-
-const logoutUser = async (refreshToken) => {
-  const session = await Session.findOne({ refreshToken });
-  if (!session) {
-    throw createHttpError(403, 'Invalid refresh token');
-  }
-
-  await Session.deleteOne({ _id: session._id });
+const deleteContactById = async (contactId, userId) => {
+  return Contact.findOneAndDelete({ _id: contactId, userId });
 };
 
 export default {
-  findUserByEmail,
-  createUser,
-  loginUser,
-  refreshSession,
-  logoutUser,
+  getAllContacts,
+  getContactById,
+  createContact,
+  updateContactById,
+  deleteContactById,
 };
