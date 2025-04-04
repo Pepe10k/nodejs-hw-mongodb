@@ -5,7 +5,7 @@ import validateBody from '../middlewares/validateBody.js';
 import isValidId from '../middlewares/isValidId.js';
 import authenticate from '../middlewares/authenticate.js';
 import upload from '../middlewares/multer.js';
-import * as validation from '../validation/contact.js';
+import * as validation from '../validation/contacts.js';
 
 const router = Router();
 
