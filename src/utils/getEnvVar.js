@@ -11,3 +11,5 @@ export const getEnvVar = (name, defaultValue) => {
 
   throw new Error(`Missing: process.env['${name}'].`);
 };
+
+export default getEnvVar;
