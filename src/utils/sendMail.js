@@ -1,33 +1,17 @@
 import nodemailer from 'nodemailer';
-import createError from 'http-errors';
+
+import { SMTP } from '../constants/index.js';
+import { getEnvVar } from '../utils/getEnvVar.js';
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: process.env.SMTP_PORT == 465,
+  host: getEnvVar(SMTP.SMTP_HOST),
+  port: Number(getEnvVar(SMTP.SMTP_PORT)),
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASSWORD,
-  },
-  tls: {
-    rejectUnauthorized: false,
+    user: getEnvVar(SMTP.SMTP_USER),
+    pass: getEnvVar(SMTP.SMTP_PASSWORD),
   },
 });
 
-const sendMail = async ({ to, subject, html }) => {
-  try {
-    const mailOptions = {
-      from: process.env.SMTP_FROM,
-      to,
-      subject,
-      html,
-    };
-
-    await transporter.sendMail(mailOptions);
-  } catch (error) {
-    console.error('Email sending error:', error.message);
-    throw createError(500, 'Failed to send the email, please try again later.');
-  }
+export const sendEmail = async (options) => {
+  return await transporter.sendMail(options);
 };
-
-export default sendMail;
