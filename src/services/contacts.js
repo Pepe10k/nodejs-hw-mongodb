@@ -28,13 +28,21 @@ const getContactById = async (contactId, userId) => {
 };
 
 const createContact = async (contactData) => {
-  return Contact.create(contactData);
+  const newContact = await Contact.create(contactData);
+
+  return newContact.toObject();
 };
 
 const updateContactById = async (contactId, userId, updateData) => {
-  return Contact.findOneAndUpdate({ _id: contactId, userId }, updateData, {
-    new: true,
-  });
+  const updatedContact = await Contact.findOneAndUpdate(
+    { _id: contactId, userId },
+    updateData,
+    {
+      new: true,
+    },
+  ).lean();
+
+  return updatedContact;
 };
 
 const deleteContactById = async (contactId, userId) => {

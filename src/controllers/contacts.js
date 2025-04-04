@@ -4,6 +4,9 @@ import parsePaginationParams from '../utils/parsePaginationParams.js';
 import calculatePaginationData from '../utils/calculatePaginationData.js';
 import parseSortParams from '../utils/parseSortParams.js';
 import parseFilterParams from '../utils/parseFilterParams.js';
+import saveFileToUploadDir from '../utils/saveFileToUploadDir.js';
+import saveFileToCloudinary from '../utils/saveFileToCloudinary.js';
+import fs from 'fs/promises';
 
 const getContacts = async (req, res) => {
   const { page, perPage } = parsePaginationParams(req.query);
@@ -53,24 +56,72 @@ const getContactById = async (req, res) => {
 };
 
 const createContact = async (req, res) => {
+  let photoUrl = null;
+
+  if (req.file) {
+    if (process.env.UPLOAD_TO_CLOUDINARY === 'true') {
+      photoUrl = await saveFileToCloudinary(req.file);
+    } else {
+      photoUrl = await saveFileToUploadDir(req.file);
+    }
+
+    if (photoUrl) {
+      photoUrl = photoUrl.replace(/\\/g, '/');
+    }
+  }
+
   const newContact = await contactsService.createContact({
     ...req.body,
     userId: req.user._id,
+    photo: photoUrl,
   });
 
   res.status(201).json({
     status: 201,
     message: 'Successfully created a contact!',
-    data: newContact,
+    data: {
+      ...newContact,
+      photo: photoUrl || null,
+    },
   });
 };
 
 const patchContact = async (req, res) => {
   const { contactId } = req.params;
+  let photoUrl = null;
+
+  if (req.file) {
+    if (process.env.UPLOAD_TO_CLOUDINARY === 'true') {
+      photoUrl = await saveFileToCloudinary(req.file);
+    } else {
+      photoUrl = await saveFileToUploadDir(req.file);
+    }
+
+    if (photoUrl) {
+      photoUrl = photoUrl.replace(/\\/g, '/');
+    }
+
+    if (
+      process.env.UPLOAD_TO_CLOUDINARY === 'true' &&
+      req.file &&
+      req.file.path
+    ) {
+      try {
+        await fs.access(req.file.path);
+        await fs.unlink(req.file.path);
+      } catch (err) {
+        console.error(`Error deleting file from tmp: ${err.message}`);
+      }
+    }
+  }
+
   const updatedContact = await contactsService.updateContactById(
     contactId,
     req.user._id,
-    req.body,
+    {
+      ...req.body,
+      ...(photoUrl ? { photo: photoUrl } : {}),
+    },
   );
 
   if (!updatedContact) {
@@ -80,7 +131,10 @@ const patchContact = async (req, res) => {
   res.status(200).json({
     status: 200,
     message: 'Successfully updated a contact!',
-    data: updatedContact,
+    data: {
+      ...updatedContact,
+      photo: photoUrl || updatedContact.photo || null,
+    },
   });
 };
 

@@ -4,8 +4,9 @@ import createHttpError from 'http-errors';
 import User from '../models/user.js';
 import Session from '../models/session.js';
 
-const FIFTEEN_MINUTES = 15 * 60 * 1000;
-const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+const ACCESS_TOKEN_EXPIRATION = 15 * 60 * 1000;
+const REFRESH_TOKEN_EXPIRATION = 30 * 24 * 60 * 60 * 1000;
+const TOKEN_LENGTH = 30;
 
 const findUserByEmail = async (email) => {
   return User.findOne({ email });
@@ -15,6 +16,11 @@ const createUser = async ({ name, email, password }) => {
   const hashedPassword = await bcrypt.hash(password, 10);
   return User.create({ name, email, password: hashedPassword });
 };
+
+const generateTokens = () => ({
+  accessToken: randomBytes(TOKEN_LENGTH).toString('base64'),
+  refreshToken: randomBytes(TOKEN_LENGTH).toString('base64'),
+});
 
 const loginUser = async ({ email, password }) => {
   const user = await User.findOne({ email });
@@ -29,15 +35,14 @@ const loginUser = async ({ email, password }) => {
 
   await Session.deleteOne({ userId: user._id });
 
-  const accessToken = randomBytes(30).toString('base64');
-  const refreshToken = randomBytes(30).toString('base64');
+  const { accessToken, refreshToken } = generateTokens();
 
   await Session.create({
     userId: user._id,
     accessToken,
     refreshToken,
-    accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
-    refreshTokenValidUntil: new Date(Date.now() + THIRTY_DAYS),
+    accessTokenValidUntil: new Date(Date.now() + ACCESS_TOKEN_EXPIRATION),
+    refreshTokenValidUntil: new Date(Date.now() + REFRESH_TOKEN_EXPIRATION),
   });
 
   return { accessToken, refreshToken };
@@ -51,15 +56,14 @@ const refreshSession = async (oldRefreshToken) => {
 
   await Session.deleteOne({ _id: session._id });
 
-  const accessToken = randomBytes(30).toString('base64');
-  const refreshToken = randomBytes(30).toString('base64');
+  const { accessToken, refreshToken } = generateTokens();
 
   await Session.create({
     userId: session.userId,
     accessToken,
     refreshToken,
-    accessTokenValidUntil: new Date(Date.now() + FIFTEEN_MINUTES),
-    refreshTokenValidUntil: new Date(Date.now() + THIRTY_DAYS),
+    accessTokenValidUntil: new Date(Date.now() + ACCESS_TOKEN_EXPIRATION),
+    refreshTokenValidUntil: new Date(Date.now() + REFRESH_TOKEN_EXPIRATION),
   });
 
   return { accessToken, refreshToken };
@@ -74,10 +78,17 @@ const logoutUser = async (refreshToken) => {
   await Session.deleteOne({ _id: session._id });
 };
 
+const resetUserPassword = async (user, newPassword) => {
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  user.password = hashedPassword;
+  await user.save();
+};
+
 export default {
   findUserByEmail,
   createUser,
   loginUser,
   refreshSession,
   logoutUser,
+  resetUserPassword,
 };
